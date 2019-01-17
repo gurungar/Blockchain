@@ -12,38 +12,6 @@ from flask import Flask, jsonify, request
 class Blockchain(object):
 
 
-    def proof_of_work(self, last_block):
-        """
-                Simple Proof of Work Algorithm:
-                 - Find a number p' such that hash(pp') contains leading 4 zeroes, where p is the previous p'
-                 - p is the previous proof, and p' is the new proof
-                :param last_proof: <int>
-                :return: <int>
-        """
-
-        last_proof = last_block['proof']
-        last_hash = self.hash(last_block)
-
-        proof = 0
-        while self.valid_proof(last_proof, proof, last_hash) is False:
-            proof += 1
-
-        return proof
-
-    @staticmethod
-    def valid_proof(last_proof, proof, last_hash):
-        """
-                Validates the Proof: Does hash(last_proof, proof) contain 4 leading zeroes?
-                :param last_proof: <int> Previous Proof
-                :param proof: <int> Current Proof
-                :return: <bool> True if correct, False if not.
-        """
-
-        guess = f'{last_proof}{proof}{last_hash}'.encode()
-        guess_hash = hashlib.sha256(guess).hexdigest()
-        return guess_hash[:4] == "0000"
-
-
     def __init__(self):
 
         # an empty list to store the blockchain
@@ -57,19 +25,24 @@ class Blockchain(object):
 
     def register_node(self, address):
         """
-                Add a new node to the list of nodes
-                :param address: <str> Address of node. Eg. 'http://192.168.0.5:5000'
-                :return: None
+        Add a new node to the list of nodes
+        :param address: Address of node. Eg. 'http://192.168.0.5:5000'
         """
 
         parsed_url = urlparse(address)
-        self.nodes.add(parsed_url.netloc)
+        if parsed_url.netloc:
+            self.nodes.add(parsed_url.netloc)
+        elif parsed_url.path:
+            # Accepts an URL without scheme like '192.168.0.5:5000'.
+            self.nodes.add(parsed_url.path)
+        else:
+            raise ValueError('Invalid URL')
 
     def valid_chain(self, chain):
         """
         Determine if a given blockchain is valid
-        :param chain: <list> A blockchain
-        :return: <bool> True if valid, False if not
+        :param chain: A blockchain
+        :return: True if valid, False if not
         """
 
         last_block = chain[0]
@@ -81,11 +54,12 @@ class Blockchain(object):
             print(f'{block}')
             print("\n-----------\n")
             # Check that the hash of the block is correct
-            if block['previous_hash'] != self.hash(last_block):
+            last_block_hash = self.hash(last_block)
+            if block['previous_hash'] != last_block_hash:
                 return False
 
             # Check that the Proof of Work is correct
-            if not self.valid_proof(last_block['proof'], block['proof']):
+            if not self.valid_proof(last_block['proof'], block['proof'], last_block_hash):
                 return False
 
             last_block = block
@@ -192,7 +166,36 @@ class Blockchain(object):
         # Returns the last Block in the chain
         return self.chain[-1]
 
+    def proof_of_work(self, last_block):
+        """
+                Simple Proof of Work Algorithm:
+                 - Find a number p' such that hash(pp') contains leading 4 zeroes, where p is the previous p'
+                 - p is the previous proof, and p' is the new proof
+                :param last_proof: <int>
+                :return: <int>
+        """
 
+        last_proof = last_block['proof']
+        last_hash = self.hash(last_block)
+
+        proof = 0
+        while self.valid_proof(last_proof, proof, last_hash) is False:
+            proof += 1
+
+        return proof
+
+    @staticmethod
+    def valid_proof(last_proof, proof, last_hash):
+        """
+                Validates the Proof: Does hash(last_proof, proof) contain 4 leading zeroes?
+                :param last_proof: <int> Previous Proof
+                :param proof: <int> Current Proof
+                :return: <bool> True if correct, False if not.
+        """
+
+        guess = f'{last_proof}{proof}{last_hash}'.encode()
+        guess_hash = hashlib.sha256(guess).hexdigest()
+        return guess_hash[:4] == "0000"
 
 # Instantiate our node
 app = Flask(__name__)
